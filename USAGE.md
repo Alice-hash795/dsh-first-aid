@@ -15,6 +15,7 @@
 | 能打开但插件全没了、设置页空白 | `check` 先体检，再 `rescue` |
 | 想日常备份一下数据 | `snapshot` |
 | `rescue` 之后还是起不来 | `minimal`（极简启动） |
+| 误删了数据 / 想退回到某个时间点 | `restore`（从备份恢复） |
 
 > 注意：如果只是偶尔卡一下，先等它自己恢复，别一上来就动配置。
 
@@ -93,6 +94,18 @@ dsh-first-aid.cmd minimal    极简启动
 插件全部不加载。**数据一个字节不碰。**
 
 进得去 DSH 之后，再跑 `rescue` 恢复完整配置。
+
+### `restore` —— 从备份恢复
+
+误删了数据、或者想退回到某个时间点：
+
+```powershell
+.\dsh-first-aid.ps1 -Action restore                      # 列出 backups 里的备份，选一个
+.\dsh-first-aid.ps1 -Action restore -Backup D:\xxx.zip   # 直接指定
+```
+
+恢复前会**自动把当前状态再备份一份**（`pre-restore-*.zip`），万一恢复错了还能再来一次。
+恢复内容：sessions / storages / memory / memory.db / 配置文件。
 
 ---
 
