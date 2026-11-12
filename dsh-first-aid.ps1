@@ -147,7 +147,6 @@ function Resolve-DshExe($cfg) {
     $cands = @()
     if ($cfg.dshExe) { $cands += $cfg.dshExe }
     $cands += 'D:\deep seek\DeepSeek Harness.exe'
-    $cands += 'D:\大肥鱼\DeepSeek Harness.exe'
     $proc = Get-Process -Name 'DeepSeek Harness' -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($proc -and $proc.Path) { $cands = @($proc.Path) + $cands }
     return Resolve-PathCandidate $cands
@@ -156,7 +155,7 @@ function Resolve-DshExe($cfg) {
 function Find-Python {
     $cands = @()
     if ($env:DSH_HOME) { $cands += (Join-Path $env:DSH_HOME 'dsh-runtimes\dsh-primary-runtime\dependencies\python\python.exe') }
-    $cands += 'C:\Users\wwbac\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\python\python.exe'
+    $cands += (Join-Path $env:USERPROFILE '.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\python\python.exe')
     return Resolve-PathCandidate $cands
 }
 
