@@ -48,7 +48,7 @@ DSH 崩溃时（BOM 污染配置、插件死锁、凭据格式错误……），
 | 会话 | `sessions/` 全部会话记录（zstd 格式） |
 | 数据 | `storages/`、`memory/` |
 | 记忆 | `evolve/memory.db` —— **SQLite 热备份**（先 `wal_checkpoint` 再 `backup()`，正在被占用也安全） |
-| 插件家 | 通过 `extraHomes` 配置（比如大肥鱼的 `D:/肥鱼小窝2`） |
+| 插件家 | 通过 `extraHomes` 配置（比如你自己的数据目录 `D:/your-agent-home`） |
 | 配置 | `cordis.patch.yml`、`package.json`、`pnpm-lock.yaml` |
 
 备份是带时间戳的 ZIP（`backups/rescue-<时间戳>.zip`），默认保留最近 10 个。
@@ -66,7 +66,7 @@ DSH 崩溃时（BOM 污染配置、插件死锁、凭据格式错误……），
   "profileName": "desktop",
   "dshExe": "D:/deep seek/DeepSeek Harness.exe",
   "dataDirs": ["sessions", "storages", "memory", "evolve"],
-  "extraHomes": ["D:/肥鱼小窝2"],
+  "extraHomes": ["D:/your-agent-home"],
   "evolveDb": "evolve/memory.db",
   "backupDir": "D:/backups/dsh-first-aid",
   "keep": 10
