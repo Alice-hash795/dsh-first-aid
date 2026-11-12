@@ -214,4 +214,22 @@ $minimal = @{ name='dsh-profile-desktop'; private=$true; dependencies=@{};
 
 **教训**：给别人看的配置，默认当作会公开——token 一律先替换成占位符，再打包。
 
+## 九、v1.1 修的一个真 bug：热备份静默失败
 
+**现象**：备份出来的 memory.db 永远是空库（4096 字节，零张表），但日志写着「热备份完成」。
+
+**根因**：PowerShell 双引号里拼 Python 代码：
+
+`powershell
+src=sqlite3.connect('file:=rw',uri=True)
+`
+
+PowerShell 把  整个当成了**变量名**（变量名可以含 ?），于是展开成空字符串，Python 实际拿到的是 ile:=rw ——connect 失败，创建了一个空库，backup 把空库复制过去，全程不报错。
+
+**修复**：用 ${dbPath} 明确变量边界：
+
+`powershell
+src=sqlite3.connect('file:?mode=rw',uri=True)
+`
+
+**教训**：PowerShell 字符串里拼接变量时，只要后面紧跟 ?、:、= 这类字符，一律用 ${var} 包起来。另外，热备份这种「成功」提示必须**验证结果**（查一下备份出来的库有没有表），不能只看退出码。
