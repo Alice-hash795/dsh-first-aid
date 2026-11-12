@@ -1,0 +1,13 @@
+{
+  "dshHome": "D:/DSH",
+  "profileName": "desktop",
+  "dshExe": "D:/deep seek/DeepSeek Harness.exe",
+  "dataDirs": ["sessions", "storages", "memory", "evolve"],
+  "extraHomes": ["D:/your-fish-home"],
+  "evolveDb": "evolve/memory.db",
+  "backupDir": "D:/backups/dsh-first-aid",
+  "keep": 10,
+  "goodPatch": "good-cordis.patch.yml",
+  "goodPackage": "good-package.json",
+  "safeBundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"]
+}
