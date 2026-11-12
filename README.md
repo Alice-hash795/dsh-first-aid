@@ -16,6 +16,7 @@ DSH 启动弹红框、闪退、插件全没、设置页空白……数据往往�
 | 启动弹红框 / 闪退 | `rescue` |
 | 插件全没 / 设置页空白 | `check` 体检，再 `rescue` |
 | `rescue` 之后还起不来 | `minimal`（极简启动） |
+| 想从某个备份恢复数据 | `restore`（恢复前会自动再备份当前状态） |
 
 > 只是偶尔卡一下，先等它自己恢复，别一上来就动配置。
 
@@ -30,6 +31,8 @@ DSH 启动弹红框、闪退、插件全没、设置页空白……数据往往�
 .\dsh-first-aid.ps1 -Action check      # 体检（不写文件）
 .\dsh-first-aid.ps1 -Action rescue     # 备份 + 回滚配置 + 启动
 .\dsh-first-aid.ps1 -Action minimal    # 极简启动（只留官方两个包）
+.\dsh-first-aid.ps1 -Action restore    # 从备份恢复（会列出可选备份）
+.\dsh-first-aid.ps1 -Action restore -Backup D:\backups\rescue-xxx.zip   # 指定备份
 ```
 
 不配置也能用——内置探测：`DSH_HOME` → `~/.dsh` → `D:/DSH` → 运行中进程反推 → 弹窗手选。
