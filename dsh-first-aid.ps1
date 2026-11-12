@@ -18,7 +18,11 @@
   rescue   备份 + 回滚配置 + 启动 DSH
   minimal  极简启动：bundles 只剩官方两个包（完整配置保留为 package.full.json）
   check    只做配置体检（JSON/YAML 合法性、bundles 是否齐全）
+  restore  从备份 ZIP 恢复数据（恢复前会自动再备份一次当前状态）
   help     显示帮助
+
+.PARAMETER Backup
+  restore 时指定要恢复的 ZIP 路径；不传则列出 backups 目录里的备份供选择。
 
 .PARAMETER TargetsFile
   配置文件路径，默认找脚本旁边的 targets.json，找不到则用内置默认值。
@@ -28,10 +32,14 @@
 
 .EXAMPLE
   .\dsh-first-aid.ps1 -Action snapshot
+
+.EXAMPLE
+  .\dsh-first-aid.ps1 -Action restore -Backup D:\backups\rescue-20261112-175302.zip
 #>
 param(
-    [ValidateSet('snapshot', 'rescue', 'minimal', 'check', 'help')]
+    [ValidateSet('snapshot', 'rescue', 'minimal', 'check', 'restore', 'help')]
     [string]$Action = 'help',
+    [string]$Backup = '',
     [string]$TargetsFile = ''
 )
 
@@ -160,11 +168,11 @@ function Find-Python {
 }
 
 # ---------- 动作 ----------
-function Invoke-Snapshot($cfg, $dshHome) {
+function Invoke-Snapshot($cfg, $dshHome, $Prefix = 'rescue') {
     $backupDir = $cfg.backupDir
     New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
-    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $zip = Join-Path $backupDir "rescue-$stamp.zip"
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss-fff'
+    $zip = Join-Path $backupDir "$Prefix-$stamp.zip"
     $staging = Join-Path $ScriptDir "staging-$stamp"
     $items = @()
 
@@ -193,7 +201,7 @@ function Invoke-Snapshot($cfg, $dshHome) {
         if ((Test-Path $memDb) -and $py) {
             $dst = Join-Path $staging 'memory.db'
             $dbPath = $memDb.Replace('\', '/')
-            $pyCode = "import sqlite3,sys`nsrc=sqlite3.connect('file:$dbPath?mode=rw',uri=True)`ntry:`n    src.execute('PRAGMA wal_checkpoint(TRUNCATE)')`nexcept Exception: pass`ndst=sqlite3.connect(sys.argv[1])`nsrc.backup(dst)`ndst.close() `n"
+            $pyCode = "import sqlite3,sys`nsrc=sqlite3.connect('file:${dbPath}?mode=rw',uri=True)`ntry:`n    src.execute('PRAGMA wal_checkpoint(TRUNCATE)')`nexcept Exception: pass`ndst=sqlite3.connect(sys.argv[1])`nsrc.backup(dst)`ndst.close() `n"
             & $py -c $pyCode $dst 2>$null
             if (Test-Path $dst) { Write-Ok 'memory.db 热备份完成' } else { Write-Warn2 'memory.db 热备份失败，已跳过' }
         } elseif (Test-Path $memDb) {
@@ -205,7 +213,8 @@ function Invoke-Snapshot($cfg, $dshHome) {
             }
         }
     }
-    $items += $staging
+    # staging 里的文件（配置 + memory.db）直接压到 ZIP 根，不要带 staging 前缀
+    $items += (Join-Path $staging '*')
 
     if ($items.Count -eq 0) {
         Write-Bad '没有可备份的内容'
@@ -333,9 +342,88 @@ function Invoke-Check($cfg, $dshHome) {
     return $fails
 }
 
+function Invoke-Restore($cfg, $dshHome, $zipPath) {
+    $backupDir = $cfg.backupDir
+
+    # 1. 选备份
+    if (-not $zipPath) {
+        $zips = @(Get-ChildItem $backupDir -Filter 'rescue-*.zip' -ErrorAction SilentlyContinue |
+                  Sort-Object LastWriteTime -Descending)
+        if ($zips.Count -eq 0) { throw "没有找到备份：$backupDir" }
+        Write-Info '可用的备份：'
+        for ($i = 0; $i -lt $zips.Count; $i++) {
+            $mb = [math]::Round($zips[$i].Length / 1MB, 1)
+            Write-Host ("  [{0}] {1}  {2} MB  {3}" -f $i, $zips[$i].Name, $mb, $zips[$i].LastWriteTime)
+        }
+        $pick = Read-Host '输入编号（直接回车取消）'
+        if ([string]::IsNullOrWhiteSpace($pick)) { Write-Warn2 '已取消'; return }
+        $zipPath = $zips[[int]$pick].FullName
+    }
+    if (-not (Test-Path $zipPath)) { throw "备份文件不存在：$zipPath" }
+
+    # 2. 恢复前先把当前状态备份一份（后悔药），前缀区分，不覆盖要恢复的那份
+    Write-Step '先备份当前状态'
+    Invoke-Snapshot $cfg $dshHome -Prefix 'pre-restore' | Out-Null
+
+    # 3. 解压到临时目录
+    $tmp = Join-Path $ScriptDir ("restore-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    Write-Step "解压 $([System.IO.Path]::GetFileName($zipPath))"
+    Expand-Archive -Path $zipPath -DestinationPath $tmp -Force
+
+    # 4. 确认
+    $profileDir = Join-Path $dshHome ("profiles\" + $cfg.profileName)
+    Write-Warn2 "将把以下目录恢复到 $dshHome ："
+    foreach ($d in @('sessions', 'storages', 'memory')) {
+        if (Test-Path (Join-Path $tmp $d)) { Write-Host "      - $d" }
+    }
+    if (Test-Path (Join-Path $tmp 'memory.db')) { Write-Host '      - evolve/memory.db' }
+    Write-Host '      以及配置文件（cordis.patch.yml / package.json，如果备份里有）'
+    $ok = Read-Host '继续？(y/N)'
+    if ($ok -notmatch '^[yY]') { Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue; Write-Warn2 '已取消'; return }
+
+    # 5. 恢复目录（覆盖式：把内容复制进目标，不要套一层）
+    $dirMap = @{
+        'sessions' = Join-Path $dshHome 'sessions'
+        'storages' = Join-Path $dshHome 'storages'
+        'memory'   = Join-Path $dshHome 'memory'
+    }
+    foreach ($k in $dirMap.Keys) {
+        $src = Join-Path $tmp $k
+        if (-not (Test-Path $src)) { continue }
+        $dst = $dirMap[$k]
+        New-Item -ItemType Directory -Force -Path $dst | Out-Null
+        Copy-Item (Join-Path $src '*') $dst -Recurse -Force
+        Write-Ok "恢复 $k"
+    }
+
+    # 6. memory.db
+    $mdb = Join-Path $tmp 'memory.db'
+    if (Test-Path $mdb) {
+        $dst = Join-Path $dshHome $cfg.evolveDb
+        New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
+        if (Test-Path $dst) { Copy-Item $dst "$dst.before-restore" -Force }
+        Copy-Item $mdb $dst -Force
+        Write-Ok '恢复 memory.db'
+    }
+
+    # 7. 配置文件
+    foreach ($f in @('cordis.patch.yml', 'package.json')) {
+        $src = Join-Path $tmp $f
+        if (-not (Test-Path $src)) { continue }
+        $dst = Join-Path $profileDir $f
+        if (Test-Path $dst) { Copy-Item $dst "$dst.before-restore" -Force }
+        Copy-Item $src $dst -Force
+        Write-Ok "恢复 $f"
+    }
+
+    Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host ''
+    Write-Ok '恢复完成。重启 DSH 后生效。'
+    Write-Warn2 "恢复前的状态已自动备份到 $backupDir（rescue-*.zip），需要回退就再 restore 一次。"
+}
+
 # ---------- 主流程 ----------
 if ($Action -eq 'help') { Show-Help; return }
-
 $cfg = Load-Targets
 $dshHome = Resolve-DshHome $cfg
 if (-not $dshHome) { throw '无法确定 DSH 数据目录' }
@@ -345,5 +433,6 @@ switch ($Action) {
     'snapshot' { $z = Invoke-Snapshot $cfg $dshHome; if ($z) { Write-Ok "备份：$z" } }
     'rescue' { Invoke-Rescue $cfg $dshHome }
     'minimal' { Invoke-Minimal $cfg $dshHome }
+    'restore' { Invoke-Restore $cfg $dshHome $Backup }
     'check' { $f = Invoke-Check $cfg $dshHome; exit $f }
 }
