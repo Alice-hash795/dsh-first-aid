@@ -1,64 +1,56 @@
 # dsh-first-aid
 
-DSH（DeepSeek Harness）**自救工具** —— 不依赖 DSH 运行，崩溃时的最后一道防线。
+**DSH（DeepSeek Harness）崩溃时的自救工具 —— 不依赖 DSH 运行。**
 
-当 DSH 启动就弹红框、进不去任何会话时，用它：
-
-- 把会话、记忆、数据**安全备份**出来
-- 把配置**回滚**到上次可用版本
-- 或者用**最小配置**把系统拉起来（只留官方两个包）
+DSH 启动弹红框、闪退、插件全没、设置页空白……数据往往还在，只是你进不去了。这个工具从系统外面把数据备份出来、把配置救回来，或者用最小配置先让它开起来。
 
 > 设计原则：**真正的安全系统，永远不依赖它所要保护的系统本身。**
 
 ---
 
-## 为什么需要它
+## 什么情况下用
 
-DSH 崩溃时（BOM 污染配置、插件死锁、凭据格式错误……），你进不了任何会话，
-也就没法让 AI 帮你备份、查日志、改配置——**工具本身得能在系统外运行**。
+| 症状 | 先做这个 |
+|---|---|
+| 想日常备份一下 | `snapshot`（最安全，随时可跑） |
+| 启动弹红框 / 闪退 | `rescue` |
+| 插件全没 / 设置页空白 | `check` 体检，再 `rescue` |
+| `rescue` 之后还起不来 | `minimal`（极简启动） |
 
-这个脚本就是那个"外部"：一个纯 PowerShell 文件，双击就能用。
+> 只是偶尔卡一下，先等它自己恢复，别一上来就动配置。
 
 ---
 
 ## 快速开始
 
+**双击** `dsh-first-aid.cmd`，按提示选；或者命令行：
+
 ```powershell
-# 只备份（最安全，随时可跑）
-.\dsh-first-aid.ps1 -Action snapshot
-
-# 备份 + 回滚配置 + 启动 DSH
-.\dsh-first-aid.ps1 -Action rescue
-
-# 极简启动：bundles 只剩官方两个包，完整配置保留为 package.full.json
-.\dsh-first-aid.ps1 -Action minimal
-
-# 配置体检（JSON/YAML 合法性、BOM、bundles 是否齐全），不写任何文件
-.\dsh-first-aid.ps1 -Action check
+.\dsh-first-aid.ps1 -Action snapshot   # 只备份
+.\dsh-first-aid.ps1 -Action check      # 体检（不写文件）
+.\dsh-first-aid.ps1 -Action rescue     # 备份 + 回滚配置 + 启动
+.\dsh-first-aid.ps1 -Action minimal    # 极简启动（只留官方两个包）
 ```
 
-双击 `dsh-first-aid.cmd` 也可以，会显示菜单。
+不配置也能用——内置探测：`DSH_HOME` → `~/.dsh` → `D:/DSH` → 运行中进程反推 → 弹窗手选。
 
 ---
 
-## 备份内容
+## 备份什么
 
-| 类别 | 内容 |
-|---|---|
-| 会话 | `sessions/` 全部会话记录（zstd 格式） |
-| 数据 | `storages/`、`memory/` |
-| 记忆 | `evolve/memory.db` —— **SQLite 热备份**（先 `wal_checkpoint` 再 `backup()`，正在被占用也安全） |
-| 插件家 | 通过 `extraHomes` 配置（比如你自己的数据目录 `D:/your-agent-home`） |
-| 配置 | `cordis.patch.yml`、`package.json`、`pnpm-lock.yaml` |
+- `sessions/`（会话记录）、`storages/`、`memory/`
+- `evolve/memory.db` —— **SQLite 热备份**（先 `wal_checkpoint` 再 `backup()`，数据库正被占用也安全）
+- 各插件自己的家目录（可配置）
+- `cordis.patch.yml` / `package.json` / `pnpm-lock.yaml`
 
-备份是带时间戳的 ZIP（`backups/rescue-<时间戳>.zip`），默认保留最近 10 个。
+存成 `backups/rescue-<时间戳>.zip`，默认保留最近 10 个。
 `node_modules` 不备份（可重装，省 700MB+）。
 
 ---
 
-## 配置（targets.json）
+## 需要配置吗
 
-不配置也能用（内置探测），想精确控制就复制 `targets.example.json` 为 `targets.json`：
+不需要。想精确控制就复制 `targets.example.json` 为 `targets.json`：
 
 ```json
 {
@@ -66,46 +58,52 @@ DSH 崩溃时（BOM 污染配置、插件死锁、凭据格式错误……），
   "profileName": "desktop",
   "dshExe": "D:/deep seek/DeepSeek Harness.exe",
   "dataDirs": ["sessions", "storages", "memory", "evolve"],
-  "extraHomes": ["D:/your-agent-home"],
-  "evolveDb": "evolve/memory.db",
-  "backupDir": "D:/backups/dsh-first-aid",
+  "extraHomes": ["D:/你的插件家目录"],
+  "backupDir": "D:/你的备份目录",
   "keep": 10
 }
 ```
-
-目录探测顺序：`targets.json` → `DSH_HOME` 环境变量 → `~/.dsh` → `D:/DSH` → 运行中进程反推 → 弹窗手选。
 
 ---
 
 ## 安全说明
 
-- **只读复制**数据目录，从不删除、从不修改
-- 回滚前会把当前配置备份成 `.before-rescue`
-- 极简启动用「重命名 + 复制预置文件」，不直接重写 JSON（断电也不会写坏）
+- **只读**：备份是复制，从不删除、从不修改你的数据
+- 回滚前先备份当前配置（`.before-rescue`）
+- 极简启动用「重命名 + 复制预置文件」，不直接重写 JSON
 - 所有文件 UTF-8 无 BOM，脚本自带 `#Requires -Version 5.1`
-- 不含任何凭据：本仓库的配置模板已脱敏（token → `YOUR_TOKEN_HERE`）
+- 仓库不含任何凭据（配置模板里都是 `YOUR_XXX` 占位符）
 
 ---
 
 ## 环境要求
 
-- Windows + PowerShell 5.1 或更高（系统自带即可，PS7 更好）
+- Windows + PowerShell 5.1 或更高（系统自带即可，有 7 更好）
 - 可选：Python 3（用于 `memory.db` 热备份，没有会退化为普通复制）
 
 ---
 
 ## 排障
 
-崩溃日志位置：
+崩溃日志：
 
 ```
 %APPDATA%\@deepseek-ai\dsh-desktop\logs\crash-*.log
 ```
 
-如果 `rescue` 和 `minimal` 都不行：
+`rescue` 和 `minimal` 都不行：
 
 1. 把 `profiles/desktop/cordis.patch.yml` 改名成 `.broken`
 2. 再启动一次（回到最原始配置，能进）
+
+---
+
+## 文档
+
+- [USAGE.md](USAGE.md) —— 使用说明（群友版，含常见问题）
+- [DESIGN.md](DESIGN.md) —— 设计思路与踩到的坑
+- [targets.example.json](targets.example.json) —— 配置模板
+- [tools/sanitize_config.py](sanitize_config.py) —— 配置脱敏工具（对外发布前剔除 token / QQ 号）
 
 ---
 
