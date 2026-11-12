@@ -81,7 +81,7 @@ D:\Fishe-Noah\
   {
     "profileDir": "D:/DSH/profiles/desktop",
     "dataDirs": ["D:/DSH/sessions", "D:/DSH/storages", "D:/DSH/memory", "D:/DSH/evolve"],
-    "homeDirs": ["D:/肥鱼小窝2"],
+    "homeDirs": ["D:/your-agent-home"],
     "backupDir": "D:/Fishe-Noah/backups",
     "keep": 10,
     "dshExe": "D:/deep seek/DeepSeek Harness.exe"
