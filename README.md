@@ -33,6 +33,8 @@ DSH 启动弹红框、闪退、插件全没、设置页空白……数据往往�
 .\dsh-first-aid.ps1 -Action minimal    # 极简启动（只留官方两个包）
 .\dsh-first-aid.ps1 -Action restore    # 从备份恢复（会列出可选备份）
 .\dsh-first-aid.ps1 -Action restore -Backup D:\backups\rescue-xxx.zip   # 指定备份
+.\dsh-first-aid.ps1 -Action install-task    # 装成计划任务，每天 03:00 自动备份
+.\dsh-first-aid.ps1 -Action uninstall-task  # 删掉计划任务
 ```
 
 不配置也能用——内置探测：`DSH_HOME` → `~/.dsh` → `D:/DSH` → 运行中进程反推 → 弹窗手选。
@@ -48,6 +50,23 @@ DSH 启动弹红框、闪退、插件全没、设置页空白……数据往往�
 
 存成 `backups/rescue-<时间戳>.zip`，默认保留最近 10 个。
 `node_modules` 不备份（可重装，省 700MB+）。
+
+---
+
+## 自动备份（可选）
+
+装一次，之后每天 03:00 自动备份，不用手动跑：
+
+```powershell
+.\dsh-first-aid.ps1 -Action install-task
+```
+
+它会创建一个 Windows 计划任务 `DSH-FirstAid-Snapshot`（用 PowerShell 7 运行）。
+删掉：
+
+```powershell
+.\dsh-first-aid.ps1 -Action uninstall-task
+```
 
 ---
 
