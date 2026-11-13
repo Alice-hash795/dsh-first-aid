@@ -170,3 +170,14 @@ DSH 崩溃时，你进不了任何会话，也就没法让 AI 帮你备份、查
 所以工具箱必须能在系统外面运行。这个脚本就是那个"外面"。
 
 完整设计说明见仓库里的 `DESIGN.md`。
+## 自动备份（可选）
+
+装一次，之后每天 03:00 自动备份：
+
+```powershell
+.\dsh-first-aid.ps1 -Action install-task
+```
+
+删掉：`.\dsh-first-aid.ps1 -Action uninstall-task`
+
+（计划任务名 `DSH-FirstAid-Snapshot`，用 PowerShell 7 运行。）
