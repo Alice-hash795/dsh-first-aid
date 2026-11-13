@@ -37,7 +37,7 @@
   .\dsh-first-aid.ps1 -Action restore -Backup D:\backups\rescue-20261112-175302.zip
 #>
 param(
-    [ValidateSet('snapshot', 'rescue', 'minimal', 'check', 'restore', 'help')]
+    [ValidateSet('snapshot', 'rescue', 'minimal', 'check', 'restore', 'install-task', 'uninstall-task', 'help')]
     [string]$Action = 'help',
     [string]$Backup = '',
     [string]$TargetsFile = ''
@@ -422,6 +422,46 @@ function Invoke-Restore($cfg, $dshHome, $zipPath) {
     Write-Warn2 "恢复前的状态已自动备份到 $backupDir（rescue-*.zip），需要回退就再 restore 一次。"
 }
 
+function Invoke-InstallTask($cfg, $dshHome) {
+    $taskName = 'DSH-FirstAid-Snapshot'
+    $scriptPath = Join-Path $ScriptDir 'dsh-first-aid.ps1'
+    if (-not (Test-Path $scriptPath)) { throw "找不到脚本：$scriptPath" }
+
+    Write-Step "创建计划任务：$taskName（每天 03:00 自动备份）"
+    $arg = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" -Action snapshot"
+    # 优先用 PowerShell 7（系统自带的 5.1 跑这个脚本会失败）
+    $pwshExe = 'C:\Program Files\PowerShell\7\pwsh.exe'
+    if (-not (Test-Path $pwshExe)) {
+        $pwshExe = (Get-Command pwsh -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source)
+    }
+    if (-not $pwshExe) { $pwshExe = 'powershell.exe' }
+    $action = New-ScheduledTaskAction -Execute $pwshExe -Argument $arg
+    $trigger = New-ScheduledTaskTrigger -Daily -At '03:00'
+    $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+
+    try {
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
+            -Settings $settings -Description 'DSH 数据每日自动备份（dsh-first-aid）' -Force | Out-Null
+        Write-Ok "已创建。下次运行：每天 03:00"
+        Write-Ok "备份目录：$($cfg.backupDir)"
+        Write-Warn2 '删掉它：-Action uninstall-task'
+    } catch {
+        Write-Bad "创建失败：$($_.Exception.Message)"
+        Write-Warn2 '如果提示权限不足，用管理员身份运行 PowerShell 再试一次'
+    }
+}
+
+function Invoke-UninstallTask() {
+    $taskName = 'DSH-FirstAid-Snapshot'
+    Write-Step "删除计划任务：$taskName"
+    try {
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
+        Write-Ok '已删除'
+    } catch {
+        Write-Warn2 "没有找到或删除失败：$($_.Exception.Message)"
+    }
+}
+
 # ---------- 主流程 ----------
 if ($Action -eq 'help') { Show-Help; return }
 $cfg = Load-Targets
@@ -434,5 +474,7 @@ switch ($Action) {
     'rescue' { Invoke-Rescue $cfg $dshHome }
     'minimal' { Invoke-Minimal $cfg $dshHome }
     'restore' { Invoke-Restore $cfg $dshHome $Backup }
+    'install-task' { Invoke-InstallTask $cfg $dshHome }
+    'uninstall-task' { Invoke-UninstallTask }
     'check' { $f = Invoke-Check $cfg $dshHome; exit $f }
 }
