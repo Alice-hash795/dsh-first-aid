@@ -181,3 +181,14 @@ DSH 崩溃时，你进不了任何会话，也就没法让 AI 帮你备份、查
 删掉：`.\dsh-first-aid.ps1 -Action uninstall-task`
 
 （计划任务名 `DSH-FirstAid-Snapshot`，用 PowerShell 7 运行。）
+
+## 清理坏凭据（purge-bad-keys）
+
+如果曾经手动往 `.credentials.yaml` 里写过 API Key（全大写的扁平名，如 `QWEN_TOB_API_KEY`），DSH 可能崩溃，而且**配置回滚也救不回来**——因为坏的是凭据层。
+
+先跑：
+
+```powershell
+.\\dsh-first-aid.ps1 -Action purge-bad-keys
+```n
+它会：备份原文件 → 删除所有不合规的扁平 Key → 保留规范格式（`插件名/自定义ID`）。重启 DSH 后生效。
