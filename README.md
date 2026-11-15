@@ -34,6 +34,7 @@ DSH 启动弹红框、闪退、插件全没、设置页空白……数据往往�
 .\dsh-first-aid.ps1 -Action restore    # 从备份恢复（会列出可选备份）
 .\dsh-first-aid.ps1 -Action restore -Backup D:\backups\rescue-xxx.zip   # 指定备份
 .\dsh-first-aid.ps1 -Action install-task    # 装成计划任务，每天 03:00 自动备份
+.\dsh-first-aid.ps1 -Action purge-bad-keys  # 清理凭据文件里不合规的扁平 Key（配置回滚前先跑）
 .\dsh-first-aid.ps1 -Action uninstall-task  # 删掉计划任务
 ```
 
