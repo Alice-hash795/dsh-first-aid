@@ -37,7 +37,7 @@
   .\dsh-first-aid.ps1 -Action restore -Backup D:\backups\rescue-20261112-175302.zip
 #>
 param(
-    [ValidateSet('snapshot', 'rescue', 'minimal', 'check', 'restore', 'install-task', 'uninstall-task', 'help')]
+    [ValidateSet('snapshot', 'rescue', 'minimal', 'check', 'restore', 'install-task', 'uninstall-task', 'purge-bad-keys', 'help')]
     [string]$Action = 'help',
     [string]$Backup = '',
     [string]$TargetsFile = ''
@@ -469,6 +469,31 @@ $dshHome = Resolve-DshHome $cfg
 if (-not $dshHome) { throw '无法确定 DSH 数据目录' }
 Write-Ok "DSH 数据目录：$dshHome"
 
+function Invoke-PurgeBadKeys($dshHome) {
+    $cred = Join-Path $dshHome '.credentials.yaml'
+    if (-not (Test-Path $cred)) { Write-Warn2 "没有凭据文件：$cred"; return }
+    Write-Step '扫描凭据文件里的不合规 Key'
+    Copy-Item $cred "$cred.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')" -Force
+    Write-Ok '已备份原文件'
+
+    $lines = [System.IO.File]::ReadAllLines($cred, [System.Text.Encoding]::UTF8)
+    $kept = New-Object System.Collections.Generic.List[string]
+    $removed = New-Object System.Collections.Generic.List[string]
+    foreach ($line in $lines) {
+        # 不合规：两格缩进的「全大写名: 值」（如 QWEN_TOB_API_KEY: sk-...）
+        if ($line -match '^\s{2}([A-Z0-9_]{3,}):\s') {
+            $removed.Add($line.Trim())
+            continue
+        }
+        $kept.Add($line)
+    }
+    if ($removed.Count -eq 0) { Write-Ok '没有发现不合规的扁平 Key'; return }
+    [System.IO.File]::WriteAllLines($cred, $kept, (New-Object System.Text.UTF8Encoding($false)))
+    Write-Ok "已删除 $($removed.Count) 行不合规 Key："
+    foreach ($r in $removed) { Write-Host "    - $r" -ForegroundColor DarkYellow }
+    Write-Warn2 '重启 DSH 后生效。属规范格式的条目（插件名/自定义ID）原样保留。'
+}
+
 switch ($Action) {
     'snapshot' { $z = Invoke-Snapshot $cfg $dshHome; if ($z) { Write-Ok "备份：$z" } }
     'rescue' { Invoke-Rescue $cfg $dshHome }
@@ -476,5 +501,6 @@ switch ($Action) {
     'restore' { Invoke-Restore $cfg $dshHome $Backup }
     'install-task' { Invoke-InstallTask $cfg $dshHome }
     'uninstall-task' { Invoke-UninstallTask }
+    'purge-bad-keys' { Invoke-PurgeBadKeys $dshHome }
     'check' { $f = Invoke-Check $cfg $dshHome; exit $f }
 }
